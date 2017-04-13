@@ -35,6 +35,7 @@ import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
@@ -52,11 +53,14 @@ import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.TimerTask;
+import java.util.Timer;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.util.Properties;
+import java.util.Timer;
 
 import javax.mail.MessagingException;
 import javax.mail.Session;
@@ -85,6 +89,10 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         private static final String PREF_ACCOUNT_NAME = "accountName";
         private static final String[] SCOPES = { GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_READONLY, GmailScopes.MAIL_GOOGLE_COM };
 
+
+        final Handler timerTaskHandler = null;
+        final Runnable timerTaskRunnable = null;
+
         com.google.api.services.gmail.Gmail mService;
     /**
          * Create the main activity.
@@ -111,8 +119,9 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 @Override
                 public void onClick(View v) {
                     mCallApiButton.setEnabled(false);
-                    mOutputText.setText("klajsdklfjaskdlf");
+                   // mOutputText.setText("klajsdklfjaskdlf");
                     try {
+                        //getResultsFromApi();
                         getResultsFromApi();
                     } catch (MessagingException e) { Log.d("onCreate() : ", e.toString()); }
                     mCallApiButton.setEnabled(true);
@@ -163,6 +172,12 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             bindService(intent, mServiceConnection, Context.BIND_AUTO_CREATE);
         }
 
+        @Override
+        protected void onDestroy() {
+            super.onDestroy();
+            timerTaskHandler.removeCallbacks(timerTaskRunnable);
+        }
+
 
 
         /**
@@ -180,22 +195,36 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             } else if (! isDeviceOnline()) {
                 mOutputText.setText("No network connection available.");
             } else {
-
-//                // start email polling service
-//                Intent intent = new Intent(this, EmailService.class);
-//                startService(intent);
-//                bindService(intent, mServiceConnection, Context.BIND_AUTO_CREATE);
-
+                mOutputText.setText("Syncing...");
                 new MakeRequestTask(this).execute();
-//                try {
-//
-//                    emailService.initiateService(mService);
-//                    List<String> emails = emailService.getDataFromApi();
-//                    System.out.println(emails);
-//                } catch(IOException e) {
-//                    Log.d("getResultsFromApi() : ", e.toString());
-//                }
+
             }
+        }
+
+
+        private void setRepeatingAsyncTaskGetEmails() {
+
+            final Handler handler = new Handler();
+            Timer timer = new Timer();
+
+
+            TimerTask task = new TimerTask() {
+                @Override
+                public void run() {
+                    handler.post(new Runnable() {
+                        public void run() {
+                            try {
+                                getResultsFromApi();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    });
+                }
+            };
+
+            timer.schedule(task, 0, 600000);  // interval of 10 minute
+
         }
 
 
@@ -233,8 +262,9 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 if (accountName != null) {
                     mCredential.setSelectedAccountName(accountName);
                     try{
-                        getResultsFromApi();
-                    } catch(MessagingException e) { Log.d("chooseAccount() : ", e.toString()) ; }
+                        //getResultsFromApi();
+                        setRepeatingAsyncTaskGetEmails();
+                    } catch(Exception e) { Log.d("chooseAccount() : ", e.toString()) ; }
                 } else {
                     // Start a dialog from which the user can choose an account
                     startActivityForResult(
@@ -273,7 +303,8 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                                     "This app requires Google Play Services. Please install " +
                                             "Google Play Services on your device and relaunch this app.");
                         } else {
-                            getResultsFromApi();
+                            //getResultsFromApi();
+                            setRepeatingAsyncTaskGetEmails();
                         }
                         break;
                     case REQUEST_ACCOUNT_PICKER:
@@ -288,18 +319,20 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                                 editor.putString(PREF_ACCOUNT_NAME, accountName);
                                 editor.apply();
                                 mCredential.setSelectedAccountName(accountName);
-                                getResultsFromApi();
+                                //getResultsFromApi();
+                                setRepeatingAsyncTaskGetEmails();
                             }
                         }
                         break;
                     case REQUEST_AUTHORIZATION:
                         if (resultCode == RESULT_OK) {
-                            getResultsFromApi();
+                            setRepeatingAsyncTaskGetEmails();
+                          //  getResultsFromApi();
                         }
                         break;
                 }
 
-            } catch (MessagingException e) {
+            } catch (Exception e) {
                 Log.d("onActivityResult() : ", e.toString());
             }
         }

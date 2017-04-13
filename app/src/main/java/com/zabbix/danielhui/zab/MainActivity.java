@@ -1,5 +1,7 @@
 package com.zabbix.danielhui.zab;
 
+
+import com.zabbix.danielhui.zab.EmailService.MyBinder;
 import javax.mail.internet.MimeMessage;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -23,19 +25,23 @@ import android.accounts.AccountManager;
 import android.app.Activity;
 import android.app.Dialog;
 import android.app.ProgressDialog;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.view.ViewGroup;
 //import android.util.Base64;
+import android.util.Log;
 import com.google.api.client.repackaged.org.apache.commons.codec.binary.Base64;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -58,11 +64,17 @@ import javax.mail.Session;
 import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
 
+
+
+
 public class MainActivity extends Activity implements EasyPermissions.PermissionCallbacks {
         GoogleAccountCredential mCredential;
+
+        ViewGroup.LayoutParams tlp;
         private TextView mOutputText;
         private Button mCallApiButton;
         ProgressDialog mProgress;
+        LinearLayout activityLayout;
 
         static final int REQUEST_ACCOUNT_PICKER = 1000;
         static final int REQUEST_AUTHORIZATION = 1001;
@@ -73,14 +85,15 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         private static final String PREF_ACCOUNT_NAME = "accountName";
         private static final String[] SCOPES = { GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_READONLY, GmailScopes.MAIL_GOOGLE_COM };
 
-        /**
+        com.google.api.services.gmail.Gmail mService;
+    /**
          * Create the main activity.
          * @param savedInstanceState previously saved instance data.
          */
         @Override
         protected void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
-            LinearLayout activityLayout = new LinearLayout(this);
+            activityLayout = new LinearLayout(this);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.MATCH_PARENT);
@@ -88,7 +101,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             activityLayout.setOrientation(LinearLayout.VERTICAL);
             activityLayout.setPadding(16, 16, 16, 16);
 
-            ViewGroup.LayoutParams tlp = new ViewGroup.LayoutParams(
+            tlp = new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT);
 
@@ -98,8 +111,10 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 @Override
                 public void onClick(View v) {
                     mCallApiButton.setEnabled(false);
-                    mOutputText.setText("");
-                    getResultsFromApi();
+                    mOutputText.setText("klajsdklfjaskdlf");
+                    try {
+                        getResultsFromApi();
+                    } catch (MessagingException e) { Log.d("onCreate() : ", e.toString()); }
                     mCallApiButton.setEnabled(true);
                 }
             });
@@ -110,8 +125,10 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             mOutputText.setPadding(16, 16, 16, 16);
             mOutputText.setVerticalScrollBarEnabled(true);
             mOutputText.setMovementMethod(new ScrollingMovementMethod());
+
+           // setAlertText("Click the \'" + BUTTON_TEXT +"\' button to test the API.");
             mOutputText.setText(
-                    "Click the \'" + BUTTON_TEXT +"\' button to test the API.");
+                   "Click the \'" + BUTTON_TEXT +"\' button to test the API.");
             activityLayout.addView(mOutputText);
 
             mProgress = new ProgressDialog(this);
@@ -123,7 +140,29 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             mCredential = GoogleAccountCredential.usingOAuth2(
                     getApplicationContext(), Arrays.asList(SCOPES))
                     .setBackOff(new ExponentialBackOff());
+
+
+            HttpTransport transport = AndroidHttp.newCompatibleTransport();
+            JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+            mService = new com.google.api.services.gmail.Gmail.Builder(
+                    transport, jsonFactory, mCredential)
+                    .setApplicationName("Gmail API")
+                    .build();
         }
+
+
+        EmailService emailService;
+
+
+        @Override
+        protected void onStart() {
+            super.onStart();
+            // start email polling service
+            Intent intent = new Intent(this, EmailService.class );
+            startService(intent);
+            bindService(intent, mServiceConnection, Context.BIND_AUTO_CREATE);
+        }
+
 
 
         /**
@@ -133,7 +172,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
          * of the preconditions are not satisfied, the app will prompt the user as
          * appropriate.
          */
-        private void getResultsFromApi() {
+        private void getResultsFromApi() throws  MessagingException {
             if (! isGooglePlayServicesAvailable()) {
                 acquireGooglePlayServices();
             } else if (mCredential.getSelectedAccountName() == null) {
@@ -141,10 +180,40 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             } else if (! isDeviceOnline()) {
                 mOutputText.setText("No network connection available.");
             } else {
-                new MakeRequestTask(mCredential).execute();
+
+//                // start email polling service
+//                Intent intent = new Intent(this, EmailService.class);
+//                startService(intent);
+//                bindService(intent, mServiceConnection, Context.BIND_AUTO_CREATE);
+
+                new MakeRequestTask(this).execute();
+//                try {
+//
+//                    emailService.initiateService(mService);
+//                    List<String> emails = emailService.getDataFromApi();
+//                    System.out.println(emails);
+//                } catch(IOException e) {
+//                    Log.d("getResultsFromApi() : ", e.toString());
+//                }
             }
         }
 
+
+
+        private ServiceConnection mServiceConnection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+
+                MyBinder myBinder = (MyBinder) service;
+                emailService = myBinder.getService();
+                Log.v("ServiceConnection","connected");
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                Log.v("ServiceConnection","disconnected");
+            }
+        };
         /**
          * Attempts to set the account used with the API credentials. If an account
          * name was previously saved it will use that one; otherwise an account
@@ -163,7 +232,9 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                         .getString(PREF_ACCOUNT_NAME, null);
                 if (accountName != null) {
                     mCredential.setSelectedAccountName(accountName);
-                    getResultsFromApi();
+                    try{
+                        getResultsFromApi();
+                    } catch(MessagingException e) { Log.d("chooseAccount() : ", e.toString()) ; }
                 } else {
                     // Start a dialog from which the user can choose an account
                     startActivityForResult(
@@ -191,40 +262,45 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
          *     activity result.
          */
         @Override
-        protected void onActivityResult(
-                int requestCode, int resultCode, Intent data) {
+        protected void onActivityResult( int requestCode, int resultCode, Intent data) {
             super.onActivityResult(requestCode, resultCode, data);
-            switch(requestCode) {
-                case REQUEST_GOOGLE_PLAY_SERVICES:
-                    if (resultCode != RESULT_OK) {
-                        mOutputText.setText(
-                                "This app requires Google Play Services. Please install " +
-                                        "Google Play Services on your device and relaunch this app.");
-                    } else {
-                        getResultsFromApi();
-                    }
-                    break;
-                case REQUEST_ACCOUNT_PICKER:
-                    if (resultCode == RESULT_OK && data != null &&
-                            data.getExtras() != null) {
-                        String accountName =
-                                data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
-                        if (accountName != null) {
-                            SharedPreferences settings =
-                                    getPreferences(Context.MODE_PRIVATE);
-                            SharedPreferences.Editor editor = settings.edit();
-                            editor.putString(PREF_ACCOUNT_NAME, accountName);
-                            editor.apply();
-                            mCredential.setSelectedAccountName(accountName);
+
+            try {
+                switch (requestCode) {
+                    case REQUEST_GOOGLE_PLAY_SERVICES:
+                        if (resultCode != RESULT_OK) {
+                            mOutputText.setText(
+                                    "This app requires Google Play Services. Please install " +
+                                            "Google Play Services on your device and relaunch this app.");
+                        } else {
                             getResultsFromApi();
                         }
-                    }
-                    break;
-                case REQUEST_AUTHORIZATION:
-                    if (resultCode == RESULT_OK) {
-                        getResultsFromApi();
-                    }
-                    break;
+                        break;
+                    case REQUEST_ACCOUNT_PICKER:
+                        if (resultCode == RESULT_OK && data != null &&
+                                data.getExtras() != null) {
+                            String accountName =
+                                    data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+                            if (accountName != null) {
+                                SharedPreferences settings =
+                                        getPreferences(Context.MODE_PRIVATE);
+                                SharedPreferences.Editor editor = settings.edit();
+                                editor.putString(PREF_ACCOUNT_NAME, accountName);
+                                editor.apply();
+                                mCredential.setSelectedAccountName(accountName);
+                                getResultsFromApi();
+                            }
+                        }
+                        break;
+                    case REQUEST_AUTHORIZATION:
+                        if (resultCode == RESULT_OK) {
+                            getResultsFromApi();
+                        }
+                        break;
+                }
+
+            } catch (MessagingException e) {
+                Log.d("onActivityResult() : ", e.toString());
             }
         }
 
@@ -324,11 +400,64 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             dialog.show();
         }
 
+        public void setAlertText(String text) {
+
+            mOutputText.setText(text);
+
+        }
+
+        /*
+        *   Google Api Calls must be called in a AsyncTask to ensure responsive ui
+        *
+        *
+        * */
+        private class MakeRequestTask extends AsyncTask<Void, Void, List<String>> {
+            private Exception mLastError = null;
+            MainActivity mainRef;
+
+            public MakeRequestTask(MainActivity ref) {
+                mainRef = ref;
+            }
+
+            @Override
+            protected List<String> doInBackground(Void... params) {
+                List<String> emails = null;
+                try {
+                        emailService.initiateService(mService);
+                        emails = emailService.getDataFromApi();
+
+
+
+                } catch (Exception e) {
+                        mLastError = e;
+                        cancel(true);
+                        return null;
+                }
+
+                return emails;
+            }
+
+//            @Override
+//            protected void onProgressUpdate(List<String> emails) throws  MessagingException, IOException{
+//                List<String> emails = emailService.getDataFromApi();
+//                System.out.println("yoyo");
+//                mainRef.setAlertText(emails.get(0));
+//            }
+
+            @Override
+            protected void onPostExecute(List<String> emails){
+                System.out.println("Executing onPostExecute");
+
+
+                mainRef.setAlertText(emails.get(0));
+            }
+        }
+
         /**
          * An asynchronous task that handles the Gmail API call.
          * Placing the API calls in their own task ensures the UI stays responsive.
          */
-        private class MakeRequestTask extends AsyncTask<Void, Void, List<String>> {
+       /* private class MakeRequestTask extends AsyncTask<Void, Void, List<String>> {
             private com.google.api.services.gmail.Gmail mService = null;
             private Exception mLastError = null;
 
@@ -345,24 +474,28 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
              * Background task to call Gmail API.
              * @param params no parameters needed for this task.
              */
+       /*
             @Override
             protected List<String> doInBackground(Void... params) {
-                try {
-                    return getDataFromApi();
-                } catch (Exception e) {
-                    mLastError = e;
-                    cancel(true);
-                    return null;
-                }
+//                try {
+//                    return getDataFromApi();
+//                } catch (Exception e) {
+//                    mLastError = e;
+//                    cancel(true);
+//                    return null;
+//                }
+
+                return null;
             }
 
-
+*/
 
             /**
              * Fetch a list of Gmail labels attached to the specified account.
              * @return List of Strings labels.
              * @throws IOException
              */
+            /*
             private List<String> getDataFromApi() throws IOException, MessagingException{
                 // Get the labels in the user's account.
                 String user = "me";
@@ -452,4 +585,5 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 }
             }
         }
+        */
 }

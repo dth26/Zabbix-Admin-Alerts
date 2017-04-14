@@ -30,6 +30,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
@@ -55,6 +57,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.TimerTask;
 import java.util.Timer;
+import java.util.Date;
+import java.text.SimpleDateFormat;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -75,7 +79,8 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         GoogleAccountCredential mCredential;
 
         ViewGroup.LayoutParams tlp;
-        private TextView mOutputText;
+        private TextView alertOutputText;
+        private TextView syncOutputText;
         private Button mCallApiButton;
         ProgressDialog mProgress;
         LinearLayout activityLayout;
@@ -119,7 +124,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 @Override
                 public void onClick(View v) {
                     mCallApiButton.setEnabled(false);
-                   // mOutputText.setText("klajsdklfjaskdlf");
+                   // alertOutputText.setText("klajsdklfjaskdlf");
                     try {
                         //getResultsFromApi();
                         getResultsFromApi();
@@ -129,16 +134,22 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             });
             activityLayout.addView(mCallApiButton);
 
-            mOutputText = new TextView(this);
-            mOutputText.setLayoutParams(tlp);
-            mOutputText.setPadding(16, 16, 16, 16);
-            mOutputText.setVerticalScrollBarEnabled(true);
-            mOutputText.setMovementMethod(new ScrollingMovementMethod());
+            syncOutputText = new TextView(this);
+            syncOutputText.setLayoutParams(tlp);
+            syncOutputText.setPadding(16, 16, 16, 16);
+            syncOutputText.setTypeface(null, Typeface.BOLD);
+            activityLayout.addView(syncOutputText);
+
+            alertOutputText = new TextView(this);
+            alertOutputText.setLayoutParams(tlp);
+            alertOutputText.setPadding(16, 16, 16, 16);
+            alertOutputText.setVerticalScrollBarEnabled(true);
+            alertOutputText.setMovementMethod(new ScrollingMovementMethod());
 
            // setAlertText("Click the \'" + BUTTON_TEXT +"\' button to test the API.");
-            mOutputText.setText(
+            alertOutputText.setText(
                    "Click the \'" + BUTTON_TEXT +"\' button to test the API.");
-            activityLayout.addView(mOutputText);
+            activityLayout.addView(alertOutputText);
 
             mProgress = new ProgressDialog(this);
             mProgress.setMessage("Calling Gmail API ...");
@@ -193,9 +204,10 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             } else if (mCredential.getSelectedAccountName() == null) {
                 chooseAccount();
             } else if (! isDeviceOnline()) {
-                mOutputText.setText("No network connection available.");
+                syncOutputText.setText("No network connection available.");
             } else {
-                mOutputText.setText("Syncing...");
+                syncOutputText.setText("Syncing with Email Client...");
+                setAlertText("");
                 new MakeRequestTask(this).execute();
 
             }
@@ -299,7 +311,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 switch (requestCode) {
                     case REQUEST_GOOGLE_PLAY_SERVICES:
                         if (resultCode != RESULT_OK) {
-                            mOutputText.setText(
+                            alertOutputText.setText(
                                     "This app requires Google Play Services. Please install " +
                                             "Google Play Services on your device and relaunch this app.");
                         } else {
@@ -378,9 +390,9 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             // Do nothing.
         }
 
-        /**
-         * Checks whether the device currently has a network connection.
-         * @return true if the device has a network connection, false otherwise.
+        /**network connection.
+         * @return true if the device has a network co
+         * Checks whether the device currently has a nnection, false otherwise.
          */
         private boolean isDeviceOnline() {
             ConnectivityManager connMgr =
@@ -435,7 +447,22 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
 
         public void setAlertText(String text) {
 
-            mOutputText.setText(text);
+            alertOutputText.setText(text);
+
+        }
+
+        public void setSyncText(boolean successfulSync) {
+
+            SimpleDateFormat dateFormat = new SimpleDateFormat("M/d/yy h:mm:ss a");
+            String formattedDate = dateFormat.format(new Date()).toString();
+
+            if (successfulSync)
+                syncOutputText.setText("Last Successful Sync Occurred " + formattedDate);
+            else {
+                syncOutputText.setTextColor(Color.parseColor("#e02f2f"));
+                syncOutputText.setText("Sync Failed at " + formattedDate);
+            }
+
 
         }
 
@@ -464,6 +491,8 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 } catch (Exception e) {
                         mLastError = e;
                         cancel(true);
+
+
                         return null;
                 }
 
@@ -481,8 +510,13 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             protected void onPostExecute(List<String> emails){
                 System.out.println("Executing onPostExecute");
 
-
-                mainRef.setAlertText(emails.get(0));
+                if(emails == null) {
+                    mainRef.setSyncText(false);
+                    mainRef.setAlertText("");
+                } else {
+                    mainRef.setSyncText(true);
+                    mainRef.setAlertText(emails.get(0));
+                }
             }
         }
 
@@ -582,7 +616,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
 
             @Override
             protected void onPreExecute() {
-                mOutputText.setText("");
+                alertOutputText.setText("");
                 mProgress.show();
             }
 
@@ -590,10 +624,10 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             protected void onPostExecute(List<String> output) {
                 mProgress.hide();
                 if (output == null || output.size() == 0) {
-                    mOutputText.setText("No results returned.");
+                    alertOutputText.setText("No results returned.");
                 } else {
                     output.add(0, "Data retrieved using the Gmail API:");
-                    mOutputText.setText(TextUtils.join("\n", output));
+                    alertOutputText.setText(TextUtils.join("\n", output));
                 }
             }
 
@@ -610,11 +644,11 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                                 ((UserRecoverableAuthIOException) mLastError).getIntent(),
                                 MainActivity.REQUEST_AUTHORIZATION);
                     } else {
-                        mOutputText.setText("The following error occurred:\n"
+                        alertOutputText.setText("The following error occurred:\n"
                                 + mLastError.getMessage());
                     }
                 } else {
-                    mOutputText.setText("Request cancelled.");
+                    alertOutputText.setText("Request cancelled.");
                 }
             }
         }

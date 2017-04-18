@@ -4,6 +4,12 @@ package com.zabbix.danielhui.zab;
 import com.zabbix.danielhui.zab.EmailService.MyBinder;
 import javax.mail.internet.MimeMessage;
 
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
+import android.media.Ringtone;
+import android.net.Uri;
+
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.api.client.extensions.android.http.AndroidHttp;
@@ -73,7 +79,13 @@ import pub.devrel.easypermissions.AfterPermissionGranted;
 import pub.devrel.easypermissions.EasyPermissions;
 
 
-
+import android.content.BroadcastReceiver;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.os.PowerManager;
+import android.widget.Toast;
 
 public class MainActivity extends Activity implements EasyPermissions.PermissionCallbacks {
         GoogleAccountCredential mCredential;
@@ -90,7 +102,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
         static final int REQUEST_PERMISSION_GET_ACCOUNTS = 1003;
 
-        private static final String BUTTON_TEXT = "Call Gmail API";
+        private static final String BUTTON_TEXT = "Switch Gmail Account";
         private static final String PREF_ACCOUNT_NAME = "accountName";
         private static final String[] SCOPES = { GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_READONLY, GmailScopes.MAIL_GOOGLE_COM };
 
@@ -125,10 +137,9 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 public void onClick(View v) {
                     mCallApiButton.setEnabled(false);
                    // alertOutputText.setText("klajsdklfjaskdlf");
-                    try {
-                        //getResultsFromApi();
-                        getResultsFromApi();
-                    } catch (MessagingException e) { Log.d("onCreate() : ", e.toString()); }
+                    // getResultsFromApi();
+                    chooseAccount();
+
                     mCallApiButton.setEnabled(true);
                 }
             });
@@ -209,6 +220,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 syncOutputText.setText("Syncing with Email Client...");
                 setAlertText("");
                 new MakeRequestTask(this).execute();
+
 
             }
         }
@@ -486,7 +498,22 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                         emailService.initiateService(mService);
                         emails = emailService.getDataFromApi();
 
+                        System.out.println(emails);
 
+                      //  Alarm alarm = new Alarm();
+                      //  alarm.setAlarm(getApplicationContext());
+
+                    Context context = getApplicationContext();
+
+                    //this will sound the alarm tone
+                    //this will sound the alarm once, if you wish to
+                    //raise alarm in loop continuously then use MediaPlayer and setLooping(true)
+                    Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                    if (alarmUri == null) {
+                        alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                    }
+                    Ringtone ringtone = RingtoneManager.getRingtone(context, alarmUri);
+                    ringtone.play();
 
                 } catch (Exception e) {
                         mLastError = e;

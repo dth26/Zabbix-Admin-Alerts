@@ -120,8 +120,8 @@ public class EmailService extends Service{
 
                 MimeMessage email = new MimeMessage(session, new ByteArrayInputStream(emailBytes));
 
-              //  System.out.println( time);
-              //  System.out.println(email.getSubject());
+                System.out.println( time);
+                System.out.println(email.getSubject());
 
                 // set email as read
                 Message messageReturn = mService.users().messages().modify(user, message.getId(), mods).execute();

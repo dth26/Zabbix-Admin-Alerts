@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">ZAB</string>
+    <string name="alarm_text">Activate Alarm Alerts:</string>
+    <string name="email_text">No Valid Email Yet</string>
+    <string name="email_btn">Change</string>
+    <string name="sync_text">No Sync Yet</string>
+    <string name="chk_vamf">VAMF Alerts</string>
+    <string name="chk_mae">MAE Alerts</string>
+    <string name="sync_btn">Force Sync</string>
+    <string name="clear_btn">Clear</string>
 </resources>

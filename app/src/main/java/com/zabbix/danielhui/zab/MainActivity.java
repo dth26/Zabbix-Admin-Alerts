@@ -9,7 +9,11 @@ import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.media.Ringtone;
 import android.net.Uri;
-
+import android.widget.CheckBox;
+import android.widget.RelativeLayout;
+import android.widget.ScrollView;
+import android.widget.ToggleButton;
+import android.widget.Switch;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.api.client.extensions.android.http.AndroidHttp;
@@ -92,25 +96,36 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
 
         ViewGroup.LayoutParams tlp;
         private TextView alertOutputText;
+        private TextView emailText;
         private TextView syncOutputText;
-        private Button mCallApiButton;
-        ProgressDialog mProgress;
-        LinearLayout activityLayout;
+        private Button emailToggleButton;
+        private Button alarmToggleButton;
+        private Button clearButton;
+        private Button syncButton;
+        private RelativeLayout activityLayout;
+        private LinearLayout alertsLayout;
+        CheckBox chkVAMF;
+        CheckBox chkMAE;
+
+        Handler handler = null;
+        Timer timer = null;
 
         static final int REQUEST_ACCOUNT_PICKER = 1000;
         static final int REQUEST_AUTHORIZATION = 1001;
         static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
         static final int REQUEST_PERMISSION_GET_ACCOUNTS = 1003;
 
-        private static final String BUTTON_TEXT = "Switch Gmail Account";
         private static final String PREF_ACCOUNT_NAME = "accountName";
         private static final String[] SCOPES = { GmailScopes.GMAIL_LABELS, GmailScopes.GMAIL_READONLY, GmailScopes.MAIL_GOOGLE_COM };
 
 
-        final Handler timerTaskHandler = null;
-        final Runnable timerTaskRunnable = null;
+
+        Ringtone ringtone;
 
         com.google.api.services.gmail.Gmail mService;
+
+
+
     /**
          * Create the main activity.
          * @param savedInstanceState previously saved instance data.
@@ -118,52 +133,90 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         @Override
         protected void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
-            activityLayout = new LinearLayout(this);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.MATCH_PARENT);
-            activityLayout.setLayoutParams(lp);
-            activityLayout.setOrientation(LinearLayout.VERTICAL);
-            activityLayout.setPadding(16, 16, 16, 16);
 
-            tlp = new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            setContentView(R.layout.activity_main);
 
-            mCallApiButton = new Button(this);
-            mCallApiButton.setText(BUTTON_TEXT);
-            mCallApiButton.setOnClickListener(new View.OnClickListener() {
+            activityLayout =  (RelativeLayout) findViewById(R.id.activityLayout);
+            alertsLayout = (LinearLayout) findViewById(R.id.alertsView);
+            alarmToggleButton = (ToggleButton) findViewById(R.id.alarmToggle);
+            emailToggleButton = (Button) findViewById(R.id.emailToggle);
+            emailText = (TextView) findViewById(R.id.emailText);
+            clearButton = (Button) findViewById(R.id.clearButton);
+            clearButton.setTextColor(Color.WHITE);
+
+            syncButton = (Button) findViewById(R.id.forceSyncButton);
+            syncOutputText = (TextView) findViewById(R.id.syncOutputText);
+            chkVAMF = (CheckBox) findViewById(R.id.chkVAMF);
+            chkMAE = (CheckBox) findViewById(R.id.chkMAE);
+
+
+            clearButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    mCallApiButton.setEnabled(false);
-                   // alertOutputText.setText("klajsdklfjaskdlf");
-                    // getResultsFromApi();
-                    chooseAccount();
+                    alertsLayout.removeAllViews();
 
-                    mCallApiButton.setEnabled(true);
+                    if(ringtone != null)
+                        ringtone.stop();
                 }
             });
-            activityLayout.addView(mCallApiButton);
 
-            syncOutputText = new TextView(this);
-            syncOutputText.setLayoutParams(tlp);
-            syncOutputText.setPadding(16, 16, 16, 16);
-            syncOutputText.setTypeface(null, Typeface.BOLD);
-            activityLayout.addView(syncOutputText);
 
-            alertOutputText = new TextView(this);
-            alertOutputText.setLayoutParams(tlp);
-            alertOutputText.setPadding(16, 16, 16, 16);
-            alertOutputText.setVerticalScrollBarEnabled(true);
-            alertOutputText.setMovementMethod(new ScrollingMovementMethod());
+            syncButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    try {
+                        getResultsFromApi();
+                    } catch (Exception e) { e.printStackTrace(); }
 
-           // setAlertText("Click the \'" + BUTTON_TEXT +"\' button to test the API.");
-            alertOutputText.setText(
-                   "Click the \'" + BUTTON_TEXT +"\' button to test the API.");
-            activityLayout.addView(alertOutputText);
+                }
+            });
 
-            mProgress = new ProgressDialog(this);
-            mProgress.setMessage("Calling Gmail API ...");
+            emailToggleButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    chooseAccount();
+                }
+            });
+
+            alarmToggleButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+
+                    String nextAlarmState = (String) alarmToggleButton.getText();
+
+                    if(nextAlarmState.equals("ON")) {
+                        syncOutputText.setText("");
+                    } else {
+                        syncOutputText.setText("Alarm is turned off. Turn it on!");
+                    }
+                }
+            });
+
+
+            chkMAE.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if(chkMAE.isChecked() || chkVAMF.isChecked())
+                        syncOutputText.setText("No Sync Yet");
+                    else
+                        syncOutputText.setText("Neither VAMF or MAE is checked above!");
+
+                }
+            });
+
+
+            chkVAMF.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if(chkMAE.isChecked() || chkVAMF.isChecked())
+                        syncOutputText.setText("No Sync Yet");
+                    else
+                        syncOutputText.setText("Neither VAMF or MAE is checked above!");
+
+                }
+            });
+
+
 
             setContentView(activityLayout);
 
@@ -179,6 +232,18 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                     transport, jsonFactory, mCredential)
                     .setApplicationName("Gmail API")
                     .build();
+
+
+
+            // Start gmail syncing process in background
+            System.out.println("mCredential Account Name");
+            System.out.println(mCredential.getSelectedAccountName());
+            if (mCredential.getSelectedAccountName() != null) {
+                setRepeatingAsyncTaskGetEmails();
+            } else {
+                System.out.println("choosing account()");
+                chooseAccount();
+            }
         }
 
 
@@ -197,7 +262,10 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         @Override
         protected void onDestroy() {
             super.onDestroy();
-            timerTaskHandler.removeCallbacks(timerTaskRunnable);
+            removeAllAlerts();
+           // timerTaskHandler.removeCallbacks(timerTaskRunnable);
+            timer.cancel();
+            timer = null;
         }
 
 
@@ -210,26 +278,35 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
          * appropriate.
          */
         private void getResultsFromApi() throws  MessagingException {
-            if (! isGooglePlayServicesAvailable()) {
+
+            String toggleState = (String)alarmToggleButton.getText();
+
+
+            if (!isGooglePlayServicesAvailable()) {
                 acquireGooglePlayServices();
             } else if (mCredential.getSelectedAccountName() == null) {
-                chooseAccount();
-            } else if (! isDeviceOnline()) {
+                syncOutputText.setText("Please choose email account above!");
+                //chooseAccount();
+            } else if (!isDeviceOnline()) {
                 syncOutputText.setText("No network connection available.");
+            } else if(toggleState.equals("OFF")) {
+                syncOutputText.setText("Alarm is turned off. Turn it on!");
+            } else if (!chkVAMF.isChecked() && !chkMAE.isChecked()) {
+                syncOutputText.setText("Neither VAMF or MAE is checked above!");
             } else {
                 syncOutputText.setText("Syncing with Email Client...");
-                setAlertText("");
-                new MakeRequestTask(this).execute();
-
+                new MakeRequestTask(this, chkVAMF.isChecked(), chkMAE.isChecked()).execute();
 
             }
         }
 
 
+
+
         private void setRepeatingAsyncTaskGetEmails() {
 
-            final Handler handler = new Handler();
-            Timer timer = new Timer();
+            handler = new Handler();
+            timer = new Timer();
 
 
             TimerTask task = new TimerTask() {
@@ -238,6 +315,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                     handler.post(new Runnable() {
                         public void run() {
                             try {
+                                removeAllAlerts();
                                 getResultsFromApi();
                             } catch (Exception e) {
                                 e.printStackTrace();
@@ -247,7 +325,8 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                 }
             };
 
-            timer.schedule(task, 0, 600000);  // interval of 10 minute
+            //timer.schedule(task, 0, 600000);  // interval of 10 minute
+            timer.schedule(task, 0, 60000);  // interval of 10 minute
 
         }
 
@@ -279,23 +358,27 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
          */
         @AfterPermissionGranted(REQUEST_PERMISSION_GET_ACCOUNTS)
         private void chooseAccount() {
-            if (EasyPermissions.hasPermissions(
-                    this, Manifest.permission.GET_ACCOUNTS)) {
-                String accountName = getPreferences(Context.MODE_PRIVATE)
-                        .getString(PREF_ACCOUNT_NAME, null);
-                if (accountName != null) {
-                    mCredential.setSelectedAccountName(accountName);
-                    try{
-                        //getResultsFromApi();
-                        setRepeatingAsyncTaskGetEmails();
-                    } catch(Exception e) { Log.d("chooseAccount() : ", e.toString()) ; }
-                } else {
-                    // Start a dialog from which the user can choose an account
+
+            System.out.println("In fact choosing an account");
+            if (EasyPermissions.hasPermissions(this, Manifest.permission.GET_ACCOUNTS)) {
+
+                String accountName = getPreferences(Context.MODE_PRIVATE).getString(PREF_ACCOUNT_NAME, null);
+
+//                if (accountName != null ) {
+//                    emailText.setText(accountName);
+//                    mCredential.setSelectedAccountName(accountName);
+//                }
+                //else {
+                   //  Start a dialog from which the user can choose an account
+
                     startActivityForResult(
                             mCredential.newChooseAccountIntent(),
                             REQUEST_ACCOUNT_PICKER);
-                }
+             //   }
+
             } else {
+
+                emailText.setText("");
                 // Request the GET_ACCOUNTS permission via a user dialog
                 EasyPermissions.requestPermissions(
                         this,
@@ -319,19 +402,30 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         protected void onActivityResult( int requestCode, int resultCode, Intent data) {
             super.onActivityResult(requestCode, resultCode, data);
 
+            System.out.println("==============================================");
+            System.out.println("==============================================");
+            System.out.println("==============================================");
+            System.out.println("===========OnActivityResult()=================");
+            System.out.println("==============================================");
+            System.out.println("==============================================");
+            System.out.println("==============================================");
+
+
             try {
                 switch (requestCode) {
                     case REQUEST_GOOGLE_PLAY_SERVICES:
                         if (resultCode != RESULT_OK) {
+                            System.out.println("REQUEST_GOOGLE_PLAY_SERVICES 1");
                             alertOutputText.setText(
                                     "This app requires Google Play Services. Please install " +
                                             "Google Play Services on your device and relaunch this app.");
                         } else {
-                            //getResultsFromApi();
-                            setRepeatingAsyncTaskGetEmails();
+                            System.out.println("REQUEST_GOOGLE_PLAY_SERVICES 2 ");
+                           // setRepeatingAsyncTaskGetEmails();
                         }
                         break;
                     case REQUEST_ACCOUNT_PICKER:
+                        System.out.println("REQUEST_ACCOUNT_PICKER");
                         if (resultCode == RESULT_OK && data != null &&
                                 data.getExtras() != null) {
                             String accountName =
@@ -343,17 +437,23 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
                                 editor.putString(PREF_ACCOUNT_NAME, accountName);
                                 editor.apply();
                                 mCredential.setSelectedAccountName(accountName);
+                                emailText.setText(accountName);
                                 //getResultsFromApi();
-                                setRepeatingAsyncTaskGetEmails();
+                            //    setRepeatingAsyncTaskGetEmails();
                             }
                         }
                         break;
                     case REQUEST_AUTHORIZATION:
+                        System.out.println("REQUEST_AUTHORIZATION");
                         if (resultCode == RESULT_OK) {
-                            setRepeatingAsyncTaskGetEmails();
+                         //   setRepeatingAsyncTaskGetEmails();
                           //  getResultsFromApi();
                         }
                         break;
+                }
+
+                if(timer==null) {
+                    setRepeatingAsyncTaskGetEmails();
                 }
 
             } catch (Exception e) {
@@ -459,8 +559,18 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
 
         public void setAlertText(String text) {
 
-            alertOutputText.setText(text);
+            TextView alertText = new TextView(getApplicationContext());
+            alertText.setText(text);
+            alertText.setTextColor(Color.parseColor("#000000"));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0,15,0,15);
+            alertText.setLayoutParams(lp);
+            alertsLayout.addView(alertText);
+        }
 
+        public void removeAllAlerts() {
+            if(alertsLayout.getChildCount() > 0)
+                alertsLayout.removeAllViews();
         }
 
         public void setSyncText(boolean successfulSync) {
@@ -471,7 +581,7 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
             if (successfulSync)
                 syncOutputText.setText("Last Successful Sync Occurred " + formattedDate);
             else {
-                syncOutputText.setTextColor(Color.parseColor("#e02f2f"));
+            //    syncOutputText.setTextColor(Color.parseColor("#e02f2f"));
                 syncOutputText.setText("Sync Failed at " + formattedDate);
             }
 
@@ -485,199 +595,72 @@ public class MainActivity extends Activity implements EasyPermissions.Permission
         * */
         private class MakeRequestTask extends AsyncTask<Void, Void, List<String>> {
             private Exception mLastError = null;
+            private boolean alarmEnabled;
+            private boolean vamfChecked;
+            private boolean maeChecked;
             MainActivity mainRef;
 
-            public MakeRequestTask(MainActivity ref) {
+            public MakeRequestTask(MainActivity ref, boolean vamfChecked, boolean maeChecked) {
                 mainRef = ref;
+                this.vamfChecked = vamfChecked;
+                this.maeChecked = maeChecked;
+            }
+
+            @Override
+            protected void onPreExecute() {
+                alarmEnabled = mainRef.alarmToggleButton.isEnabled();
+
             }
 
             @Override
             protected List<String> doInBackground(Void... params) {
                 List<String> emails = null;
                 try {
-                        emailService.initiateService(mService);
-                        emails = emailService.getDataFromApi();
 
-                        System.out.println(emails);
-
-                      //  Alarm alarm = new Alarm();
-                      //  alarm.setAlarm(getApplicationContext());
-
-                    Context context = getApplicationContext();
-
-                    //this will sound the alarm tone
-                    //this will sound the alarm once, if you wish to
-                    //raise alarm in loop continuously then use MediaPlayer and setLooping(true)
-                    Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-                    if (alarmUri == null) {
-                        alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-                    }
-                    Ringtone ringtone = RingtoneManager.getRingtone(context, alarmUri);
-                    ringtone.play();
+                    emailService.initiateService(mService);
+                    emails = emailService.getDataFromApi(maeChecked, vamfChecked);
+                    System.out.println(emails);
 
                 } catch (Exception e) {
                         mLastError = e;
-                        cancel(true);
-
-
-                        return null;
                 }
 
                 return emails;
             }
 
-//            @Override
-//            protected void onProgressUpdate(List<String> emails) throws  MessagingException, IOException{
-//                List<String> emails = emailService.getDataFromApi();
-//                System.out.println("yoyo");
-//                mainRef.setAlertText(emails.get(0));
-//            }
+
 
             @Override
             protected void onPostExecute(List<String> emails){
                 System.out.println("Executing onPostExecute");
 
+                removeAllAlerts();
+
                 if(emails == null) {
                     mainRef.setSyncText(false);
-                    mainRef.setAlertText("");
-                } else {
+                } else if (emails.size()==0) {
                     mainRef.setSyncText(true);
-                    mainRef.setAlertText(emails.get(0));
-                }
-            }
-        }
+                    mainRef.setAlertText("No Zabbix Alerts!");
+                }else {
+                    mainRef.setSyncText(true);
 
-        /**
-         * An asynchronous task that handles the Gmail API call.
-         * Placing the API calls in their own task ensures the UI stays responsive.
-         */
-       /* private class MakeRequestTask extends AsyncTask<Void, Void, List<String>> {
-            private com.google.api.services.gmail.Gmail mService = null;
-            private Exception mLastError = null;
-
-            MakeRequestTask(GoogleAccountCredential credential) {
-                HttpTransport transport = AndroidHttp.newCompatibleTransport();
-                JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
-                mService = new com.google.api.services.gmail.Gmail.Builder(
-                        transport, jsonFactory, credential)
-                        .setApplicationName("Gmail API Android Quickstart")
-                        .build();
-            }
-
-            /**
-             * Background task to call Gmail API.
-             * @param params no parameters needed for this task.
-             */
-       /*
-            @Override
-            protected List<String> doInBackground(Void... params) {
-//                try {
-//                    return getDataFromApi();
-//                } catch (Exception e) {
-//                    mLastError = e;
-//                    cancel(true);
-//                    return null;
-//                }
-
-                return null;
-            }
-
-*/
-
-            /**
-             * Fetch a list of Gmail labels attached to the specified account.
-             * @return List of Strings labels.
-             * @throws IOException
-             */
-            /*
-            private List<String> getDataFromApi() throws IOException, MessagingException{
-                // Get the labels in the user's account.
-                String user = "me";
-                List<String> emailMessages = new ArrayList<String>();
-                ListLabelsResponse listResponse =
-                        mService.users().labels().list(user).execute();
-
-                // Set email as read
-                List<String> labelsToRemove = new ArrayList<String>();
-                labelsToRemove.add("UNREAD");
-
-
-                //ListMessagesResponse messageResponse =  mService.users().messages().list(user).setQ("is:unread").execute();
-                ListMessagesResponse messageResponse =  mService.users().messages().list(user).setQ("label:UNREAD").execute();
-
-                for(Message message : messageResponse.getMessages()) {
-
-                    ModifyMessageRequest mods = new ModifyMessageRequest().setRemoveLabelIds(labelsToRemove);
-                    Message messageText = mService.users().messages().get(user, message.getId()).setFormat("raw").execute();
-
-                    Long timeStamp =messageText.getInternalDate();
-                    java.util.Date time=new java.util.Date((long)timeStamp*1000);
-
-                    Base64 base64Url = new Base64(true);
-                    byte[] emailBytes = base64Url.decodeBase64(messageText.getRaw());
-
-
-                    Properties props = new Properties();
-                    Session session = Session.getDefaultInstance(props, null);
-
-                    MimeMessage email = new MimeMessage(session, new ByteArrayInputStream(emailBytes));
-
-                    System.out.println( time);
-                    System.out.println(email.getSubject());
-                 //   System.out.println(email.);
-
-
-                    // set email as read
-                    Message messageReturn = mService.users().messages().modify(user, message.getId(), mods).execute();
-
-                    emailMessages.add(time + ": \n" + email.getSubject());
-                }
-
-//                for (Label label : listResponse.getLabels()) {
-//                    labels.add(label.getName());
-//                }
-
-                return emailMessages;
-            }
-
-
-            @Override
-            protected void onPreExecute() {
-                alertOutputText.setText("");
-                mProgress.show();
-            }
-
-            @Override
-            protected void onPostExecute(List<String> output) {
-                mProgress.hide();
-                if (output == null || output.size() == 0) {
-                    alertOutputText.setText("No results returned.");
-                } else {
-                    output.add(0, "Data retrieved using the Gmail API:");
-                    alertOutputText.setText(TextUtils.join("\n", output));
-                }
-            }
-
-            @Override
-            protected void onCancelled() {
-                mProgress.hide();
-                if (mLastError != null) {
-                    if (mLastError instanceof GooglePlayServicesAvailabilityIOException) {
-                        showGooglePlayServicesAvailabilityErrorDialog(
-                                ((GooglePlayServicesAvailabilityIOException) mLastError)
-                                        .getConnectionStatusCode());
-                    } else if (mLastError instanceof UserRecoverableAuthIOException) {
-                        startActivityForResult(
-                                ((UserRecoverableAuthIOException) mLastError).getIntent(),
-                                MainActivity.REQUEST_AUTHORIZATION);
-                    } else {
-                        alertOutputText.setText("The following error occurred:\n"
-                                + mLastError.getMessage());
+                    for(int i=0; i<emails.size(); i++) {
+                        mainRef.setAlertText(emails.get(i));
                     }
-                } else {
-                    alertOutputText.setText("Request cancelled.");
+
+                    //this will sound the alarm tone
+                    //this will sound the alarm once, if you wish to
+                    if ( alarmEnabled ) {
+                        Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+//                        if (alarmUri == null) {
+//                            alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+//                        }
+                        ringtone = RingtoneManager.getRingtone(getApplicationContext(), alarmUri);
+                        ringtone.play();
+                    }
                 }
+
             }
         }
-        */
 }
+

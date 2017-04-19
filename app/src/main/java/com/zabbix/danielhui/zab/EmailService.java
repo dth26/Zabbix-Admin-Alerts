@@ -7,6 +7,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.os.Binder;
 import android.util.Log;
+import android.widget.CheckBox;
 
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
@@ -41,6 +42,7 @@ public class EmailService extends Service{
     private static String TAG = "Email Service";
     private Context context;
     private boolean isServiceRunning = false;
+
 
     public void initiateService(com.google.api.services.gmail.Gmail mService){
 //        mCredential = GoogleAccountCredential.usingOAuth2(
@@ -89,7 +91,10 @@ public class EmailService extends Service{
     }
 
 
-    public List<String> getDataFromApi() throws IOException, MessagingException {
+    public List<String> getDataFromApi(boolean maeChecked, boolean vamfChecked) throws IOException, MessagingException {
+
+        System.out.println("Fetching data...");
+
         // Get the labels in the user's account.
         String user = "me";
         List<String> emailMessages = new ArrayList<String>();
@@ -100,34 +105,65 @@ public class EmailService extends Service{
         List<String> labelsToRemove = new ArrayList<String>();
         labelsToRemove.add("UNREAD");
 
-        ListMessagesResponse messageResponse =  mService.users().messages().list(user).setQ("label:UNREAD").execute();
+        String query = "";
 
-
-        for(Message message : messageResponse.getMessages()) {
-
-                ModifyMessageRequest mods = new ModifyMessageRequest().setRemoveLabelIds(labelsToRemove);
-                Message messageText = mService.users().messages().get(user, message.getId()).setFormat("raw").execute();
-
-                Long timeStamp =messageText.getInternalDate();
-                java.util.Date time=new java.util.Date((long)timeStamp*1000);
-
-                Base64 base64Url = new Base64(true);
-                byte[] emailBytes = base64Url.decodeBase64(messageText.getRaw());
-
-
-                Properties props = new Properties();
-                Session session = Session.getDefaultInstance(props, null);
-
-                MimeMessage email = new MimeMessage(session, new ByteArrayInputStream(emailBytes));
-
-                System.out.println( time);
-                System.out.println(email.getSubject());
-
-                // set email as read
-                Message messageReturn = mService.users().messages().modify(user, message.getId(), mods).execute();
-
-                emailMessages.add(time + ": \n" + email.getSubject());
+        // set up query filter
+        if(!maeChecked && !vamfChecked) {
+            emailMessages.add("Neither VAMF or MAE is checked above.");
+            return emailMessages;
+        } else if (maeChecked && vamfChecked) {
+            query = "from:vamf-no-reply@va.gov OR from:mae-no-reply@va.gov label:UNREAD";
+        } else if (maeChecked) {
+            query = "from:mae-no-reply@va.gov label:UNREAD";
+        } else if (vamfChecked) {
+            query = "from:vamf-no-reply@va.gov label:UNREAD";
         }
+
+        System.out.println("Query: " + query);
+
+        ListMessagesResponse messageResponse;
+
+        try {
+            messageResponse = mService.users().messages().list(user).setQ(query).execute();
+
+            if(messageResponse.getMessages() != null) {
+
+                for (Message message : messageResponse.getMessages()) {
+
+                    ModifyMessageRequest mods = new ModifyMessageRequest().setRemoveLabelIds(labelsToRemove);
+                    Message messageText = mService.users().messages().get(user, message.getId()).setFormat("raw").execute();
+
+                    Long timeStamp = messageText.getInternalDate();
+                    java.util.Date time = new java.util.Date((long) timeStamp * 1000);
+
+                    Base64 base64Url = new Base64(true);
+                    byte[] emailBytes = base64Url.decodeBase64(messageText.getRaw());
+
+
+                    Properties props = new Properties();
+                    Session session = Session.getDefaultInstance(props, null);
+
+                    MimeMessage email = new MimeMessage(session, new ByteArrayInputStream(emailBytes));
+
+
+                    System.out.println(time + email.getSubject());
+
+                    // set email as read
+                    Message messageReturn = mService.users().messages().modify(user, message.getId(), mods).execute();
+
+                    emailMessages.add(time + ": \n" + email.getSubject());
+                }
+
+            }
+
+        } catch(Exception e) {
+            e.printStackTrace();
+            emailMessages = null;   // null return value means sync failed
+        }
+
+
+
+
 
 
         return emailMessages;
